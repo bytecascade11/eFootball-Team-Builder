@@ -19,9 +19,15 @@ jobs:
           ls dist
 
       - name: Create Android project
+        run: npx cap add android
+
+      - name: Generate app icons
         run: |
-          npx cap add android
-          npx cap sync android
+          ls assets
+          npx --yes @capacitor/assets generate --android
+
+      - name: Sync web assets
+        run: npx cap sync android
 
       - name: Build APK
         run: cd android && chmod +x gradlew && ./gradlew assembleDebug
