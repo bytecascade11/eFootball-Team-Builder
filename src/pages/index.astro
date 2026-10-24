@@ -1,0 +1,152 @@
+---
+const title = "eFootball Team Builder";
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a1a12" />
+  <title>{title}</title>
+</head>
+<body>
+  <header>
+    <h1>⚽ {title}</h1>
+    <select id="formation" aria-label="Formation"></select>
+  </header>
+
+  <div class="stats">
+    <div><small>Players</small><b id="count">0/11</b></div>
+    <div><small>Team rating</small><b id="avg">--</b></div>
+  </div>
+
+  <div class="pitch" id="pitch"></div>
+
+  <div class="actions">
+    <button id="copy">Copy lineup</button>
+    <button id="clear" class="ghost">Clear</button>
+  </div>
+
+  <div class="sheet" id="sheet" hidden>
+    <div class="box">
+      <h2 id="slotTitle">Player</h2>
+      <input id="name" placeholder="Player name" autocomplete="off" />
+      <input id="rating" type="number" inputmode="numeric" min="40" max="120" placeholder="Rating (e.g. 98)" />
+      <div class="actions">
+        <button id="save">Save</button>
+        <button id="remove" class="ghost">Remove</button>
+        <button id="close" class="ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // [position label, x%, y%] — GK is always first
+    const FORMATIONS = {
+      "4-3-3": [["GK",50,90],["LB",15,72],["CB",38,74],["CB",62,74],["RB",85,72],["CMF",25,50],["DMF",50,55],["CMF",75,50],["LWF",18,22],["CF",50,15],["RWF",82,22]],
+      "4-2-3-1": [["GK",50,90],["LB",15,72],["CB",38,74],["CB",62,74],["RB",85,72],["DMF",35,56],["DMF",65,56],["LMF",18,34],["AMF",50,34],["RMF",82,34],["CF",50,13]],
+      "4-4-2": [["GK",50,90],["LB",15,72],["CB",38,74],["CB",62,74],["RB",85,72],["LMF",15,48],["CMF",38,50],["CMF",62,50],["RMF",85,48],["CF",38,18],["CF",62,18]],
+      "3-5-2": [["GK",50,90],["CB",25,74],["CB",50,76],["CB",75,74],["LMF",10,50],["CMF",32,52],["DMF",50,58],["CMF",68,52],["RMF",90,50],["CF",38,18],["CF",62,18]],
+      "5-3-2": [["GK",50,90],["LB",10,66],["CB",30,74],["CB",50,76],["CB",70,74],["RB",90,66],["CMF",28,48],["CMF",50,50],["CMF",72,48],["CF",38,18],["CF",62,18]],
+    };
+    const KEY = "efb-team-v1";
+    const $ = (id) => document.getElementById(id);
+    const sel = $("formation"), pitch = $("pitch"), sheet = $("sheet");
+
+    let state = { formation: "4-3-3", players: Array(11).fill(null) };
+    try { state = { ...state, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; } catch {}
+    if (!FORMATIONS[state.formation]) state.formation = "4-3-3";
+    let active = -1;
+
+    Object.keys(FORMATIONS).forEach((f) => sel.add(new Option(f, f)));
+    sel.value = state.formation;
+
+    const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+
+    function render() {
+      pitch.innerHTML = "";
+      FORMATIONS[state.formation].forEach(([pos, x, y], i) => {
+        const p = state.players[i];
+        const el = document.createElement("button");
+        el.className = "slot" + (p ? " filled" : "");
+        el.style.left = x + "%"; el.style.top = y + "%";
+        el.innerHTML = `<span class="dot">${p ? p.rating || "?" : "+"}</span><span class="nm">${p ? p.name : pos}</span>`;
+        el.onclick = () => openSheet(i);
+        pitch.appendChild(el);
+      });
+      const filled = state.players.filter(Boolean);
+      const rated = filled.filter((p) => p.rating);
+      $("count").textContent = `${filled.length}/11`;
+      $("avg").textContent = rated.length ? (rated.reduce((a, p) => a + p.rating, 0) / rated.length).toFixed(1) : "--";
+      save();
+    }
+
+    function openSheet(i) {
+      active = i;
+      const p = state.players[i];
+      $("slotTitle").textContent = FORMATIONS[state.formation][i][0];
+      $("name").value = p ? p.name : "";
+      $("rating").value = p && p.rating ? p.rating : "";
+      sheet.hidden = false;
+      $("name").focus();
+    }
+    const closeSheet = () => { sheet.hidden = true; active = -1; };
+
+    $("save").onclick = () => {
+      const name = $("name").value.trim();
+      if (!name) return;
+      const r = parseInt($("rating").value, 10);
+      state.players[active] = { name, rating: isNaN(r) ? 0 : r };
+      closeSheet(); render();
+    };
+    $("remove").onclick = () => { state.players[active] = null; closeSheet(); render(); };
+    $("close").onclick = closeSheet;
+
+    sel.onchange = () => { state.formation = sel.value; render(); };
+    $("clear").onclick = () => { if (confirm("Clear the whole team?")) { state.players = Array(11).fill(null); render(); } };
+
+    $("copy").onclick = async () => {
+      const lines = FORMATIONS[state.formation].map(([pos], i) => {
+        const p = state.players[i];
+        return `${pos}: ${p ? p.name + (p.rating ? ` (${p.rating})` : "") : "-"}`;
+      });
+      const text = `My eFootball team (${state.formation})\n` + lines.join("\n");
+      try { await navigator.clipboard.writeText(text); $("copy").textContent = "Copied!"; }
+      catch { $("copy").textContent = "Copy failed"; }
+      setTimeout(() => ($("copy").textContent = "Copy lineup"), 1500);
+    };
+
+    render();
+  </script>
+
+  <style is:global>
+    * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+    body { font-family: system-ui, sans-serif; background: #0a1a12; color: #eaf5ee; min-height: 100vh;
+      padding: env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 16px); }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 0; }
+    h1 { font-size: 18px; }
+    select, input { background: #13281d; color: #fff; border: 1px solid #2a4a38; border-radius: 10px; padding: 10px 12px; font-size: 16px; }
+    .stats { display: flex; gap: 10px; margin-bottom: 12px; }
+    .stats div { flex: 1; background: #13281d; border-radius: 12px; padding: 10px 14px; display: grid; }
+    .stats small { color: #8fb09c; } .stats b { font-size: 22px; }
+    .pitch { position: relative; width: 100%; aspect-ratio: 3 / 4; border-radius: 16px; overflow: hidden;
+      background:
+        linear-gradient(#fff3 2px, transparent 2px) 0 50% / 100% 100% no-repeat,
+        repeating-linear-gradient(#1f6b3a 0 12.5%, #1b5f34 12.5% 25%); border: 2px solid #ffffff55; }
+    .slot { position: absolute; transform: translate(-50%, -50%); background: none; border: 0; color: #fff;
+      display: grid; justify-items: center; gap: 2px; width: 64px; }
+    .dot { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700;
+      background: #0006; border: 2px dashed #fff9; }
+    .filled .dot { background: #e6b800; color: #111; border: 2px solid #fff; }
+    .nm { font-size: 11px; font-weight: 600; text-shadow: 0 1px 3px #000; max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .actions { display: flex; gap: 10px; margin-top: 14px; }
+    button { font: inherit; }
+    .actions button { flex: 1; padding: 14px; border: 0; border-radius: 12px; background: #30d36b; color: #062; font-weight: 700; }
+    .actions .ghost { background: #13281d; color: #eaf5ee; }
+    .sheet { position: fixed; inset: 0; background: #000a; display: flex; align-items: flex-end; }
+    .sheet[hidden] { display: none; }
+    .box { width: 100%; background: #0f2218; border-radius: 20px 20px 0 0; padding: 20px 16px calc(env(safe-area-inset-bottom) + 20px); display: grid; gap: 10px; }
+    h2 { font-size: 18px; }
+  </style>
+</body>
+</html>
